@@ -1,0 +1,73 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    healthcheck:
+      test: [ "CMD", "psql" ,"-U", "postgres", "-w", "-c", "SELECT 1;" ]
+      timeout: 0.5s
+      interval: 0.5s
+      retries: 100
+    ports:
+      - "5432:5432"
+    env_file:
+      - ./app/.env
+    volumes:
+      - ../test_dataset.csv:/opt/app/test_dataset.csv
+      - ../task_3.sql:/opt/app/task_3.sql
+
+  airflow-web-server:
+    build:
+      dockerfile: ./docker/app/Dockerfile
+      context: ../
+    depends_on:
+      - postgres
+    env_file:
+      - ./app/.env
+    command: /bin/sh -c "airflow db migrate && airflow api-server"
+    volumes:
+      - ../dags:/opt/app/airflow/dags
+      - ../test_dataset.csv:/opt/app/test_dataset.csv
+    ports:
+      - "8080:8080"
+
+  airflow-scheduler:
+    build:
+      dockerfile: ./docker/app/Dockerfile
+      context: ../
+    command: airflow scheduler
+    env_file:
+      - ./app/.env
+    volumes:
+      - ../dags:/opt/app/airflow/dags
+      - ../test_dataset.csv:/opt/app/test_dataset.csv
+    restart: always
+
+  airflow-dag-processor:
+    build:
+      dockerfile: ./docker/app/Dockerfile
+      context: ../
+    command: airflow dag-processor
+    env_file:
+      - ./app/.env
+    volumes:
+      - ../dags:/opt/app/airflow/dags
+      - ../test_dataset.csv:/opt/app/test_dataset.csv
+    restart: always
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest-alpine
+    ports:
+      - "8123:8123"
+    env_file:
+      - ./app/.env
+    volumes:
+      - ../task_4.sql:/opt/app/task_4.sql
+
+  minio:
+    image: minio/minio:latest
+    entrypoint: sh
+    command: -c 'mkdir -p /data/test-bucket && minio server /data'
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    env_file:
+      - ./app/.env
